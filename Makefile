@@ -1,4 +1,4 @@
-IMG_NAME=haihoanguci/bookmark-service
+IMG_NAME=haihoanguci/bookmark-worker
 GIT_TAG := $(shell git describe --tags --exact-match --abbrev=0 2>/dev/null)
 BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 IMG_TAG := temporary
