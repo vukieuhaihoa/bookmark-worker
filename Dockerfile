@@ -38,8 +38,6 @@ ENV TZ=Asia/Ho_Chi_Minh
 WORKDIR /app
 
 COPY --from=build /opt/app/bookmark-worker /app/bookmark-worker
-COPY --from=build /opt/app/docs /app/docs
-COPY --from=build /opt/app/migrations /app/migrations
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
