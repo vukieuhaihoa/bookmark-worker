@@ -1,0 +1,49 @@
+package bookmark
+
+import (
+	"context"
+
+	"github.com/vukieuhaihoa/bookmark-libs/pkg/dbutils"
+	"github.com/vukieuhaihoa/bookmark-libs/pkg/encoding"
+	"github.com/vukieuhaihoa/bookmark-worker/internal/app/model"
+	"gorm.io/gorm"
+)
+
+// CreateBookmark creates a new bookmark in the database.
+// It takes a context and a bookmark model as input.
+// Returns the created bookmark and an error if the operation fails.
+//
+// Parameters:
+//   - ctx: The context for managing request-scoped values and cancellation.
+//   - bookmark: The bookmark model to be created.
+//
+// Returns:
+//   - *model.Bookmark: The created bookmark model.
+//   - error: An error if the creation fails, otherwise nil.
+func (r *bookmarkRepository) CreateBookmark(ctx context.Context, bookmark *model.Bookmark) (*model.Bookmark, error) {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// NULL is inserted for code_shorten_encoded — no UNIQUE conflict
+		if err := tx.Omit("CodeShortenEncoded").Create(bookmark).Error; err != nil {
+			return err
+		}
+
+		encoded, err := encoding.StdEncoding.EncodeInt64ToString(bookmark.CodeShorten)
+		if err != nil {
+			return err
+		}
+
+		bookmark.CodeShortenEncoded = model.BookmarkShortenPrefix + encoded
+
+		if err := tx.Save(bookmark).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, dbutils.CatchDBError(err)
+	}
+
+	return bookmark, nil
+}
