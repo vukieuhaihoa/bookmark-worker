@@ -12,6 +12,7 @@ import (
 	bookmarkHandler "github.com/vukieuhaihoa/bookmark-worker/internal/app/handler/bookmark"
 	"github.com/vukieuhaihoa/bookmark-worker/internal/app/model"
 	bookmarkRepo "github.com/vukieuhaihoa/bookmark-worker/internal/app/repository/bookmark"
+	"github.com/vukieuhaihoa/bookmark-worker/internal/app/repository/cache"
 	queueRepo "github.com/vukieuhaihoa/bookmark-worker/internal/app/repository/queue"
 	bookmarkService "github.com/vukieuhaihoa/bookmark-worker/internal/app/service/bookmark"
 	"github.com/vukieuhaihoa/bookmark-worker/internal/worker"
@@ -34,9 +35,10 @@ func makeTestWorkerEngine(t *testing.T, ctx context.Context, message []string) (
 	db.AutoMigrate(&model.Bookmark{})
 
 	testQueueRepo := queueRepo.NewRedisQueue(mockRedisClient, "test_queue")
+	testCacheRepo := cache.NewRedisCache(mockRedisClient)
 
 	bookmarkRepo := bookmarkRepo.NewBookmarkRepository(db)
-	bookmarkSvc := bookmarkService.NewBookmarkService(bookmarkRepo)
+	bookmarkSvc := bookmarkService.NewBookmarkService(bookmarkRepo, testCacheRepo)
 	handler := bookmarkHandler.NewHandler(bookmarkSvc)
 	testEngine := worker.NewEngine(testQueueRepo, handler)
 
