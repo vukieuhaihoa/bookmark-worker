@@ -1,6 +1,6 @@
 # bookmark-worker
 
-A background worker service that processes bookmark import jobs from a Redis queue and persists them to a PostgreSQL database. Built with Go using Domain-Driven Design (DDD) principles.
+A background worker service that processes bookmark import jobs from a Redis queue, persists them to PostgreSQL, and invalidates the Redis cache so the API service always serves fresh data. Built with Go using Domain-Driven Design (DDD) principles.
 
 ## Architecture
 
@@ -14,14 +14,16 @@ Engine (main loop)
 Worker Pool (5 concurrent workers)
     │  dispatches messages
     ▼
-Handler → Service → Repository → PostgreSQL
+Handler → Service ──► 1. Invalidate Redis cache (list_bookmarks_{user_id})
+                  └──► 2. Insert bookmarks → PostgreSQL
 ```
 
 - **Engine**: polls Redis queue in a loop, dispatches messages to the worker pool
 - **Worker Pool**: fixed pool of goroutines that process messages concurrently
 - **Handler**: deserializes the JSON message and calls the bookmark service
-- **Service**: applies business logic and calls the repository
-- **Repository**: persists bookmarks to PostgreSQL via GORM
+- **Service**: invalidates the user's bookmark list cache, then persists bookmarks
+- **Cache Repository**: deletes the `list_bookmarks_{user_id}` key from Redis
+- **Bookmark Repository**: inserts bookmarks into PostgreSQL via GORM
 
 ## Message Format
 
@@ -45,6 +47,7 @@ Workers consume JSON messages from Redis with the following structure:
 |------------|--------------------------|
 | Language   | Go 1.25                  |
 | Queue      | Redis (go-redis v9)      |
+| Cache      | Redis (go-redis v9)      |
 | Database   | PostgreSQL (GORM)        |
 | Logging    | zerolog                  |
 | Container  | Docker                   |
@@ -53,14 +56,14 @@ Workers consume JSON messages from Redis with the following structure:
 
 All configuration is via environment variables:
 
-| Variable       | Default                   | Description                        |
-|----------------|---------------------------|------------------------------------|
-| `QUEUE_NAME`   | `bookmark_import_queue`   | Redis queue key to consume from    |
-| `SERVICE_NAME` | `bookmark-worker`         | Service identifier for logging     |
-| `INSTANCE_ID`  | _(auto-generated UUID)_   | Unique instance identifier         |
+| Variable       | Default                   | Description                          |
+|----------------|---------------------------|--------------------------------------|
+| `QUEUE_NAME`   | `bookmark_import_queue`   | Redis queue key to consume from      |
+| `SERVICE_NAME` | `bookmark-worker`         | Service identifier for logging       |
+| `INSTANCE_ID`  | _(auto-generated UUID)_   | Unique instance identifier           |
 | `LOG_LEVEL`    | `debug`                   | Log level (`debug`, `info`, `error`) |
-| `DB_*`         | _(see bookmark-libs)_     | PostgreSQL connection settings     |
-| `REDIS_*`      | _(see bookmark-libs)_     | Redis connection settings          |
+| `DB_*`         | _(see bookmark-libs)_     | PostgreSQL connection settings       |
+| `REDIS_*`      | _(see bookmark-libs)_     | Redis connection settings            |
 
 ## Getting Started
 
@@ -147,16 +150,19 @@ make redis-monitor  # monitor Redis commands in real time
 ```
 bookmark-worker/
 ├── cmd/
-│   └── worker/         # entrypoint
+│   └── worker/             # entrypoint
 ├── internal/
 │   ├── app/
-│   │   ├── handler/    # message deserialization
-│   │   ├── model/      # domain models
-│   │   ├── repository/ # database & queue access
-│   │   └── service/    # business logic
-│   ├── infrastructure/ # wiring (DB, Redis, engine setup)
-│   └── worker/         # engine, worker pool, config
-├── migrations/         # SQL migration files
+│   │   ├── handler/        # message deserialization
+│   │   ├── model/          # domain models
+│   │   ├── repository/
+│   │   │   ├── bookmark/   # PostgreSQL bookmark repository
+│   │   │   ├── cache/      # Redis cache repository
+│   │   │   └── queue/      # Redis queue repository
+│   │   └── service/        # business logic (cache invalidation + DB write)
+│   ├── infrastructure/     # wiring (DB, Redis, engine setup)
+│   └── worker/             # engine, worker pool, config
+├── migrations/             # SQL migration files
 └── test/
-    └── integration/    # integration tests
+    └── integration/        # integration tests
 ```

@@ -5,10 +5,13 @@ import (
 
 	"github.com/vukieuhaihoa/bookmark-libs/pkg/common"
 	"github.com/vukieuhaihoa/bookmark-libs/pkg/logger"
+
 	bookmarkHandler "github.com/vukieuhaihoa/bookmark-worker/internal/app/handler/bookmark"
-	bookmarkRepo "github.com/vukieuhaihoa/bookmark-worker/internal/app/repository/bookmark"
-	queueRepo "github.com/vukieuhaihoa/bookmark-worker/internal/app/repository/queue"
+	bookmarkRepository "github.com/vukieuhaihoa/bookmark-worker/internal/app/repository/bookmark"
+	"github.com/vukieuhaihoa/bookmark-worker/internal/app/repository/cache"
 	bookmarkService "github.com/vukieuhaihoa/bookmark-worker/internal/app/service/bookmark"
+
+	queueRepository "github.com/vukieuhaihoa/bookmark-worker/internal/app/repository/queue"
 	"github.com/vukieuhaihoa/bookmark-worker/internal/worker"
 )
 
@@ -30,10 +33,11 @@ func CreateEngine() {
 
 	dbClient := CreateSQLDB()
 
-	queueRepo := queueRepo.NewRedisQueue(redisClient, cfg.QueueName)
+	queueRepo := queueRepository.NewRedisQueue(redisClient, cfg.QueueName)
+	cacheRepo := cache.NewRedisCache(redisClient)
 
-	bookmarkRepo := bookmarkRepo.NewBookmarkRepository(dbClient)
-	bookmarkSvc := bookmarkService.NewBookmarkService(bookmarkRepo)
+	bookmarkRepo := bookmarkRepository.NewBookmarkRepository(dbClient)
+	bookmarkSvc := bookmarkService.NewBookmarkService(bookmarkRepo, cacheRepo)
 	handler := bookmarkHandler.NewHandler(bookmarkSvc)
 
 	engine := worker.NewEngine(queueRepo, handler)

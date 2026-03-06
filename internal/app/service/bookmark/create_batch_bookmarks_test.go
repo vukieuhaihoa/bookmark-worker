@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/vukieuhaihoa/bookmark-worker/internal/app/model"
 	mockBookmarkRepo "github.com/vukieuhaihoa/bookmark-worker/internal/app/repository/bookmark/mocks"
+	mockCacheRepo "github.com/vukieuhaihoa/bookmark-worker/internal/app/repository/cache/mocks"
 )
 
 func TestService_CreateBatchBookmarks(t *testing.T) {
@@ -15,7 +16,8 @@ func TestService_CreateBatchBookmarks(t *testing.T) {
 	testCases := []struct {
 		name string
 
-		setupMockRepo func(ctx context.Context) *mockBookmarkRepo.Repository
+		setupMockCacheRepo    func(ctx context.Context) *mockCacheRepo.Repository
+		setupMockBookmarkRepo func(ctx context.Context) *mockBookmarkRepo.Repository
 
 		inputImportMsg *ImportMessage
 
@@ -24,7 +26,13 @@ func TestService_CreateBatchBookmarks(t *testing.T) {
 		{
 			name: "create batch bookmarks successfully",
 
-			setupMockRepo: func(ctx context.Context) *mockBookmarkRepo.Repository {
+			setupMockCacheRepo: func(ctx context.Context) *mockCacheRepo.Repository {
+				cacheMock := mockCacheRepo.NewRepository(t)
+				cacheMock.On("DelCacheData", ctx, "list_bookmarks_4d9326d6-980c-4c62-9709-dbc70a82cbfe").Return(nil)
+				return cacheMock
+			},
+
+			setupMockBookmarkRepo: func(ctx context.Context) *mockBookmarkRepo.Repository {
 				repoMock := mockBookmarkRepo.NewRepository(t)
 				repoMock.On("CreateBatchBookmarks", ctx, []*model.Bookmark{
 					{
@@ -58,9 +66,45 @@ func TestService_CreateBatchBookmarks(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name: "fail to create batch bookmarks due to repository error",
+			name: "fail to create batch bookmarks due to cache repository error",
 
-			setupMockRepo: func(ctx context.Context) *mockBookmarkRepo.Repository {
+			setupMockCacheRepo: func(ctx context.Context) *mockCacheRepo.Repository {
+				cacheMock := mockCacheRepo.NewRepository(t)
+				cacheMock.On("DelCacheData", ctx, "list_bookmarks_4d9326d6-980c-4c62-9709-dbc70a82cbfe").Return(assert.AnError)
+				return cacheMock
+			},
+
+			setupMockBookmarkRepo: func(ctx context.Context) *mockBookmarkRepo.Repository {
+				repoMock := mockBookmarkRepo.NewRepository(t)
+				return repoMock
+			},
+
+			inputImportMsg: &ImportMessage{
+				UID: "4d9326d6-980c-4c62-9709-dbc70a82cbfe",
+				Bookmarks: []*ImportBookmarkInput{
+					{
+						URL:         "https://example.com/newbookmark1",
+						Description: "New bookmark 1 for Test User 1",
+					},
+					{
+						URL:         "https://example.com/newbookmark2",
+						Description: "New bookmark 2 for Test User 1",
+					},
+				},
+			},
+
+			expectedError: assert.AnError,
+		},
+		{
+			name: "fail to create batch bookmarks due to bookmark repository error",
+
+			setupMockCacheRepo: func(ctx context.Context) *mockCacheRepo.Repository {
+				cacheMock := mockCacheRepo.NewRepository(t)
+				cacheMock.On("DelCacheData", ctx, "list_bookmarks_4d9326d6-980c-4c62-9709-dbc70a82cbfe").Return(nil)
+				return cacheMock
+			},
+
+			setupMockBookmarkRepo: func(ctx context.Context) *mockBookmarkRepo.Repository {
 				repoMock := mockBookmarkRepo.NewRepository(t)
 				repoMock.On("CreateBatchBookmarks", ctx, []*model.Bookmark{
 					{
@@ -100,8 +144,9 @@ func TestService_CreateBatchBookmarks(t *testing.T) {
 			t.Parallel()
 
 			ctx := t.Context()
-			mockRepo := tc.setupMockRepo(ctx)
-			service := NewBookmarkService(mockRepo)
+			mockCacheRepo := tc.setupMockCacheRepo(ctx)
+			mockBookmarkRepo := tc.setupMockBookmarkRepo(ctx)
+			service := NewBookmarkService(mockBookmarkRepo, mockCacheRepo)
 
 			err := service.CreateBatchBookmarks(ctx, tc.inputImportMsg)
 			if err != nil {
