@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/vukieuhaihoa/bookmark-worker/internal/app/service/bookmark"
 )
 
@@ -32,11 +33,19 @@ var ErrUnmarshalMessage = errors.New("failed to unmarshal message")
 // Handle processes the incoming message to create bookmarks in batch.
 // It expects the message to be a JSON-encoded ImportMessage. The function first attempts to unmarshal the message into an ImportMessage struct. If unmarshaling fails, it returns an ErrUnmarshalMessage error. If unmarshaling is successful, it calls the CreateBatchBookmarks method of the bookmark service with the unmarshaled ImportMessage. If any error occurs during the creation of batch bookmarks, it returns that error; otherwise, it returns nil indicating successful handling of the message.
 func (h *handler) Handle(ctx context.Context, message []byte) error {
+	txn := newrelic.FromContext(ctx)
+	s := txn.StartSegment("Handler_Handle")
+	defer s.End()
+
 	input := &bookmark.ImportMessage{}
 	err := json.Unmarshal(message, input)
 	if err != nil {
 		return ErrUnmarshalMessage
 	}
+
+	// Custom attributes — visible in NR transaction details
+	txn.AddAttribute("user_id", input.UID)
+	txn.AddAttribute("bookmark_count", len(input.Bookmarks))
 
 	err = h.svc.CreateBatchBookmarks(ctx, input)
 	if err != nil {

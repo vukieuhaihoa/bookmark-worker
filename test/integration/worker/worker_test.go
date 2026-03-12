@@ -40,7 +40,7 @@ func makeTestWorkerEngine(t *testing.T, ctx context.Context, message []string) (
 	bookmarkRepo := bookmarkRepo.NewBookmarkRepository(db)
 	bookmarkSvc := bookmarkService.NewBookmarkService(bookmarkRepo, testCacheRepo)
 	handler := bookmarkHandler.NewHandler(bookmarkSvc)
-	testEngine := worker.NewEngine(testQueueRepo, handler)
+	testEngine := worker.NewEngine(testQueueRepo, handler, nil)
 
 	return testEngine, db
 }

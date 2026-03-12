@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/rs/zerolog/log"
 	"github.com/vukieuhaihoa/bookmark-worker/internal/app/handler/bookmark"
 	"github.com/vukieuhaihoa/bookmark-worker/internal/app/repository/queue"
@@ -26,19 +27,21 @@ type engine struct {
 	handler bookmark.Handler
 	run     bool
 	sigChan chan os.Signal
+	nrApp   *newrelic.Application
 }
 
-func NewEngine(queue queue.Queue, handler bookmark.Handler) Engine {
+func NewEngine(queue queue.Queue, handler bookmark.Handler, nrApp *newrelic.Application) Engine {
 	return &engine{
 		queue:   queue,
 		handler: handler,
+		nrApp:   nrApp,
 		sigChan: make(chan os.Signal, 1),
 	}
 }
 
 func (e *engine) Start(ctx context.Context) {
 	log.Info().Msg("starting worker engine")
-	workerPool := NewPool(ctx, e.handler, DefaultNumWorkers)
+	workerPool := NewPool(ctx, e.handler, DefaultNumWorkers, e.nrApp)
 	signal.Notify(e.sigChan, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	e.run = true
 	for e.run {

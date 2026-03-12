@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/vukieuhaihoa/bookmark-worker/internal/app/model"
 )
 
@@ -24,7 +25,19 @@ type ImportMessage struct {
 }
 
 func (s *bookmarkService) CreateBatchBookmarks(ctx context.Context, importMsg *ImportMessage) error {
+	// Segment for the entire service method
+	seg := newrelic.FromContext(ctx).StartSegment("Service_CreateBatchBookmarks")
+	defer seg.End()
+
+	// Datastore segment for cache deletion (Redis)
+	cacheSeg := newrelic.DatastoreSegment{
+		StartTime:  newrelic.FromContext(ctx).StartSegmentNow(),
+		Product:    newrelic.DatastoreRedis,
+		Collection: "cache",
+		Operation:  "DEL",
+	}
 	err := s.cache.DelCacheData(ctx, fmt.Sprintf(ListBookmarksCacheGroupKey, importMsg.UID))
+	cacheSeg.End()
 	if err != nil {
 		return err
 	}
