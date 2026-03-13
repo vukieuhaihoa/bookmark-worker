@@ -40,7 +40,9 @@ func CreateEngine() {
 	bookmarkSvc := bookmarkService.NewBookmarkService(bookmarkRepo, cacheRepo)
 	handler := bookmarkHandler.NewHandler(bookmarkSvc)
 
-	engine := worker.NewEngine(queueRepo, handler)
+	nrApp := CreateNewRelicClient()
+
+	engine := worker.NewEngine(queueRepo, handler, nrApp)
 
 	engine.Start(ctx)
 }

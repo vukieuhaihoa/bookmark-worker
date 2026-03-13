@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/rs/zerolog/log"
 	"github.com/vukieuhaihoa/bookmark-worker/internal/app/handler/bookmark"
 )
@@ -17,6 +18,7 @@ type worker struct {
 	wg           *sync.WaitGroup
 	messagesChan <-chan []byte
 	errChan      chan<- *worker
+	nrApp        *newrelic.Application
 }
 
 func (w *worker) Work(ctx context.Context) {
@@ -41,14 +43,20 @@ func (w *worker) Work(ctx context.Context) {
 			return
 		}
 
+		// Start a New Relic transaction for each message
+		txn := w.nrApp.StartTransaction("worker/handle-bookmark-import")
+		txnCtx := newrelic.NewContext(ctx, txn)
+
 		log.Debug().Int("worker_id", w.id).Bytes("message", msg).Msg("worker received message")
 
-		err := w.handler.Handle(ctx, msg)
+		err := w.handler.Handle(txnCtx, msg)
 		if err != nil {
 			log.Error().Err(err).Bytes("message", msg).Int("worker_id", w.id).Msg("failed to handle message")
 		} else {
 			log.Debug().Int("worker_id", w.id).Bytes("message", msg).Msg("worker handled message successfully")
 		}
+
+		txn.End() // End the transaction after handling the message
 	}
 }
 
@@ -58,9 +66,10 @@ type Pool struct {
 	wg           *sync.WaitGroup
 	messagesChan chan []byte
 	errChan      chan *worker
+	nrApp        *newrelic.Application
 }
 
-func NewPool(ctx context.Context, handler bookmark.Handler, numWorkers int) *Pool {
+func NewPool(ctx context.Context, handler bookmark.Handler, numWorkers int, nrApp *newrelic.Application) *Pool {
 	log.Info().Int("num_workers", numWorkers).Msg("creating worker pool")
 	messagesChan := make(chan []byte, numWorkers)
 	errChan := make(chan *worker, numWorkers)
@@ -71,6 +80,7 @@ func NewPool(ctx context.Context, handler bookmark.Handler, numWorkers int) *Poo
 		wg:           &sync.WaitGroup{},
 		messagesChan: messagesChan,
 		errChan:      errChan,
+		nrApp:        nrApp,
 	}
 
 	pool.init(ctx)
@@ -87,6 +97,7 @@ func (p *Pool) init(ctx context.Context) {
 			wg:           p.wg,
 			messagesChan: p.messagesChan,
 			errChan:      p.errChan,
+			nrApp:        p.nrApp,
 		}
 
 		p.wg.Add(1)
